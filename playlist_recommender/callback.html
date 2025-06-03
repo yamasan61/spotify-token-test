@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Token Received</title>
+</head>
+<body>
+  <h1>アクセストークン取得成功！</h1>
+  <script>
+    const hash = window.location.hash.substring(1);
+    const params = new URLSearchParams(hash);
+    const token = params.get('access_token');
+    console.log("Access Token:", token);
+    document.body.innerHTML += `<p style="color:green">Token: ${token}</p>`;
+  </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>今日のおすすめプレイリスト</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="container">
+    <h1>今日のおすすめプレイリスト</h1>
+
+    <form id="playlistForm" class="form">
+      <label>
+        ジャンル：
+        <select id="genreSelect" required></select>
+      </label>
+
+      <label class="token-label">
+        Spotify アクセストークン：
+        <input type="text" id="tokenInput" placeholder="Paste your token here" required>
+      </label>
+
+      <button type="submit" class="btn">取得</button>
+    </form>
+
+    <section id="tracks" class="tracks"></section>
+  </main>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
