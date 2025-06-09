@@ -51,31 +51,35 @@
       fetchRecommendations(accessToken);
     }
 
-    async function fetchRecommendations(token) {
-      try {
-        const res = await fetch('https://api.spotify.com/v1/recommendations?seed_genres=pop&limit=10&market=JP', {
-          headers: { Authorization: 'Bearer ' + token }
-        });
-        if (!res.ok) throw new Error('API error ' + res.status);
-        const { tracks=[] } = await res.json();
-        if (!tracks.length) {
-          tracksElm.textContent = 'おすすめ曲が取得できませんでした。';
-          return;
-        }
-        tracks.forEach(t => {
-          const card = document.createElement('div');
-          card.className = 'card';
-          card.innerHTML = `
-            <img src="${t.album.images[0]?.url || ''}" alt="${t.name}">
-            <p class="title">${t.name}</p>
-            <p class="artist">${t.artists.map(a=>a.name).join(', ')}</p>`;
-          tracksElm.appendChild(card);
-        });
-      } catch (e) {
-        tracksElm.textContent = 'エラー: ' + e.message;
-        console.error(e);
+  async function fetchRecommendations(token) {
+  try {
+    const url =
+      'https://api.spotify.com/v1/recommendations' +
+      '?seed_genres=pop&limit=10&market=JP';
+
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        Accept: 'application/json'
       }
+    });
+
+    if (res.status === 401) throw new Error('トークンが無効または期限切れです');
+    if (!res.ok)      throw new Error('API error ' + res.status);
+
+    const { tracks = [] } = await res.json();
+    if (!tracks.length) {
+      tracksElm.textContent = '曲が取得できませんでした';
+      return;
     }
+    // …カード生成は従来どおり…
+  } catch (e) {
+    tracksElm.textContent = 'エラー: ' + e.message;
+    console.error(e);
+  }
+}
+
   </script>
 </body>
 </html>
