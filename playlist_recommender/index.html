@@ -51,34 +51,30 @@
       fetchRecommendations(accessToken);
     }
 
-  async function fetchRecommendations(token) {
+async function fetchRecommendations(token) {
   try {
-    const url =
-      'https://api.spotify.com/v1/recommendations' +
-      '?seed_genres=pop&limit=10&market=JP';
+    const url = new URL('https://api.spotify.com/v1/recommendations');
+    url.search = new URLSearchParams({
+      seed_genres: 'pop',
+      limit: 10,
+      market: 'JP'
+    }).toString();   // ← 余計な改行や空白が絶対に入らない
 
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: 'Bearer ' + token,
-        Accept: 'application/json'
-      }
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: 'Bearer ' + token }
     });
 
     if (res.status === 401) throw new Error('トークンが無効または期限切れです');
     if (!res.ok)      throw new Error('API error ' + res.status);
 
     const { tracks = [] } = await res.json();
-    if (!tracks.length) {
-      tracksElm.textContent = '曲が取得できませんでした';
-      return;
-    }
-    // …カード生成は従来どおり…
+    /* ここでカード生成 */
   } catch (e) {
-    tracksElm.textContent = 'エラー: ' + e.message;
     console.error(e);
+    tracksElm.textContent = 'エラー: ' + e.message;
   }
 }
+
 
   </script>
 </body>
