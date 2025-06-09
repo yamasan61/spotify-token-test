@@ -30,8 +30,9 @@
     const tracksElm = document.getElementById('tracks');
 
     loginBtn.addEventListener('click', async () => {
-      const { verifier, challenge } = await createPKCE();
-      sessionStorage.setItem('code_verifier', verifier);
+     const { verifier, challenge } = await createPKCE();
+     console.log('set verifier', verifier);
+     sessionStorage.setItem('code_verifier', verifier);
 
       const params = new URLSearchParams({
         client_id: clientId,
