@@ -2,32 +2,29 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Callback - Spotify PKCE Demo</title>
+  <title>Callback</title>
 </head>
 <body>
-  <h1>Spotify Token Exchange</h1>
-  <div id="status">処理中...</div>
+  <p id="msg">トークン取得中...</p>
 
   <script type="module">
-    const clientId = '89175f465b5d42c9aac789c37cf8d730';
+    const clientId    = '89175f465b5d42c9aac789c37cf8d730';
     const redirectUri = 'https://yamasan61.github.io/spotify-token-test/playlist_recommender/callback.html';
+    const indexPage   = 'https://yamasan61.github.io/spotify-token-test/playlist_recommender/index.html';
 
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-
-    const statusElm = document.getElementById('status');
+    const params = new URLSearchParams(location.search);
+    const code   = params.get('code');
+    const msgElm = document.getElementById('msg');
 
     if (!code) {
-      statusElm.textContent = '認可コードが取得できませんでした。';
-      console.error('No code in URL');
-      throw new Error('No code');
+      msgElm.textContent = '認可コードがありません';
+      throw new Error('no code');
     }
 
     const verifier = sessionStorage.getItem('code_verifier');
     if (!verifier) {
-      statusElm.textContent = 'code_verifier が見つかりません。';
-      console.error('No code_verifier');
-      throw new Error('No verifier');
+      msgElm.textContent = 'code_verifier が見つかりません';
+      throw new Error('no verifier');
     }
 
     try {
@@ -41,33 +38,18 @@
 
       const res = await fetch('https://accounts.spotify.com/api/token', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
+        headers: {'Content-Type':'application/x-www-form-urlencoded'},
         body
       });
+      if (!res.ok) throw new Error(await res.text());
 
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error('Token endpoint error: ' + errText);
-      }
-
-      const json = await res.json();
-      console.log('Token response', json);
-      const { access_token, refresh_token, expires_in } = json;
-
-      if (access_token) {
-        statusElm.innerHTML = `
-          <p style="color:green">Access Token: ${access_token}</p>
-          <p>Expires in: ${expires_in} seconds</p>
-          ${refresh_token ? `<p>Refresh Token: ${refresh_token}</p>` : ''}
-        `;
-      } else {
-        statusElm.textContent = 'トークンが取得できませんでした。';
-      }
-    } catch (err) {
-      console.error(err);
-      statusElm.textContent = 'エラー: ' + err.message;
+      const { access_token } = await res.json();
+      sessionStorage.setItem('access_token', access_token);
+      sessionStorage.removeItem('code_verifier');
+      location.href = indexPage;
+    } catch (e) {
+      msgElm.textContent = 'エラー: ' + e.message;
+      console.error(e);
     }
   </script>
 </body>

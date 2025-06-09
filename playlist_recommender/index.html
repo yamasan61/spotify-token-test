@@ -2,25 +2,34 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Spotify PKCE Demo</title>
+  <title>Playlist Recommender</title>
   <style>
-    body{font-family:Arial,Helvetica,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:#f5f7fa;}
-    .btn{padding:0.8rem 1.6rem;font-size:1.1rem;border:none;border-radius:6px;background:#1db954;color:#fff;cursor:pointer;}
-    .btn:hover{opacity:0.9;}
+    body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;margin:0;padding:2rem 1rem;}
+    h1{margin-top:0;text-align:center;}
+    #loginBtn{display:inline-block;margin:1rem auto;padding:0.8rem 1.6rem;font-size:1.1rem;border:none;border-radius:6px;background:#1db954;color:#fff;cursor:pointer;}
+    #tracks{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;margin-top:2rem;}
+    .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.1);padding:0.8rem;text-align:center;}
+    .card img{width:100%;border-radius:6px;}
+    .title{font-size:0.9rem;font-weight:bold;margin:0.4rem 0;}
+    .artist{font-size:0.8rem;color:#555;}
   </style>
 </head>
 <body>
-  <h1>Spotify Authorization Code Flow with PKCE</h1>
-  <button id="loginBtn" class="btn">Spotify でログイン</button>
+  <h1>Spotify おすすめ楽曲</h1>
+  <button id="loginBtn">Spotify でログイン</button>
+  <div id="tracks"></div>
 
   <script type="module">
     import { createPKCE } from './pkce.js';
 
-    const clientId = '89175f465b5d42c9aac789c37cf8d730';
+    const clientId    = '89175f465b5d42c9aac789c37cf8d730';
     const redirectUri = 'https://yamasan61.github.io/spotify-token-test/playlist_recommender/callback.html';
-    const scope = 'user-read-private';
+    const scope       = 'user-read-private';
 
-    document.getElementById('loginBtn').addEventListener('click', async () => {
+    const loginBtn = document.getElementById('loginBtn');
+    const tracksElm = document.getElementById('tracks');
+
+    loginBtn.addEventListener('click', async () => {
       const { verifier, challenge } = await createPKCE();
       sessionStorage.setItem('code_verifier', verifier);
 
@@ -33,10 +42,40 @@
         code_challenge: challenge,
         show_dialog: 'true'
       });
-
-      // リダイレクト
-      window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
+      location.href = 'https://accounts.spotify.com/authorize?' + params.toString();
     });
+
+    const accessToken = sessionStorage.getItem('access_token');
+    if (accessToken) {
+      loginBtn.style.display = 'none';
+      fetchRecommendations(accessToken);
+    }
+
+    async function fetchRecommendations(token) {
+      try {
+        const res = await fetch('https://api.spotify.com/v1/recommendations?seed_genres=pop&limit=10&market=JP', {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        if (!res.ok) throw new Error('API error ' + res.status);
+        const { tracks=[] } = await res.json();
+        if (!tracks.length) {
+          tracksElm.textContent = 'おすすめ曲が取得できませんでした。';
+          return;
+        }
+        tracks.forEach(t => {
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.innerHTML = `
+            <img src="${t.album.images[0]?.url || ''}" alt="${t.name}">
+            <p class="title">${t.name}</p>
+            <p class="artist">${t.artists.map(a=>a.name).join(', ')}</p>`;
+          tracksElm.appendChild(card);
+        });
+      } catch (e) {
+        tracksElm.textContent = 'エラー: ' + e.message;
+        console.error(e);
+      }
+    }
   </script>
 </body>
 </html>
