@@ -43,9 +43,9 @@
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
-        }),
+        },
         body
-      };
+      });
 
       if (!res.ok) {
         const errText = await res.text();
