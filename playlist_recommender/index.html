@@ -14,17 +14,17 @@
   <button id="loginBtn" class="btn">Spotify でログイン</button>
 
   <script type="module">
-    import {{ createPKCE }} from './pkce.js';
+    import { createPKCE } from './pkce.js';
 
     const clientId = '89175f465b5d42c9aac789c37cf8d730';
     const redirectUri = 'https://yamasan61.github.io/spotify-token-test/playlist_recommender/callback.html';
     const scope = 'user-read-private';
 
-    document.getElementById('loginBtn').addEventListener('click', async () => {{
-      const {{ verifier, challenge }} = await createPKCE();
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+      const { verifier, challenge } = await createPKCE();
       sessionStorage.setItem('code_verifier', verifier);
 
-      const params = new URLSearchParams({{
+      const params = new URLSearchParams({
         client_id: clientId,
         response_type: 'code',
         redirect_uri: redirectUri,
@@ -32,11 +32,11 @@
         code_challenge_method: 'S256',
         code_challenge: challenge,
         show_dialog: 'true'
-      }});
+      });
 
       // リダイレクト
-      window.location.href = `https://accounts.spotify.com/authorize?${{params.toString()}}`;
-    }});
+      window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
+    });
   </script>
 </body>
 </html>
