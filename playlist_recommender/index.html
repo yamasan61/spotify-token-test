@@ -10,7 +10,7 @@
     #tracks{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;margin-top:2rem;}
     .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.1);padding:0.8rem;text-align:center;}
     .card img{width:100%;border-radius:6px;}
-    .title{font-size:.9rem;font-weight:bold;margin:.4rem 0;}
+    .title{font-size:.9rem;font-weight:700;margin:.4rem 0;}
     .artist{font-size:.8rem;color:#555;}
   </style>
 </head>
@@ -23,7 +23,7 @@
     import { createPKCE } from './pkce.js';
 
     /* ===== アプリ設定 ===== */
-    const clientId    = '89175f465b5d42c9aac789c37cf8d730';        // ←ご自身の Client ID
+    const clientId    = '89175f465b5d42c9aac789c37cf8d730';           // ←ご自分の Client ID
     const redirectUri = 'https://yamasan61.github.io/spotify-token-test/playlist_recommender/callback.html';
     const scope       = 'user-read-private user-top-read';
 
@@ -33,17 +33,15 @@
     /* ---------- 汎用 fetch ---------- */
     async function safeFetch(url, token){
       const res = await fetch(url,{ headers:{ Authorization:'Bearer '+token }});
-      if(res.status===401) throw new Error('401: トークン期限切れ');
-      if(res.status===403) throw new Error('403: 認可エラー');
-      if(!res.ok)         throw new Error(res.status+' : '+await res.text());
+      if(!res.ok) throw new Error(res.status);
       return res.json();
     }
 
     /* ---------- Spotify ログイン (PKCE＋state) ---------- */
     loginBtn.addEventListener('click', async ()=>{
       const { verifier, challenge } = await createPKCE();
-      const state = crypto.randomUUID();                       // ←任意の一意文字列
-      localStorage.setItem('pkce.'+state, verifier);           // state に紐付け
+      const state = crypto.randomUUID();
+      localStorage.setItem('pkce.'+state, verifier);
 
       const p = new URLSearchParams({
         client_id: clientId,
@@ -61,32 +59,35 @@
     /* ---------- ページロード時 ---------- */
     const accessToken = sessionStorage.getItem('access_token');
     if(accessToken){
-      loginBtn.style.display = 'none';
+      loginBtn.style.display='none';
       fetchRecommendations(accessToken);
     }
 
     /* ---------- 推薦シードを作成 ---------- */
     async function createSeedParams(token){
       try{
-        const ta = await safeFetch('https://api.spotify.com/v1/me/top/artists?limit=5&time_range=medium_term',token);
-        const ids=ta.items.map(a=>a.id).filter(Boolean);
+        const topA = await safeFetch('https://api.spotify.com/v1/me/top/artists?limit=5&time_range=medium_term',token);
+        const ids  = topA.items.map(a=>a.id).filter(Boolean);
         if(ids.length) return `seed_artists=${ids.join(',')}`;
-      }catch(_){}
+      }catch(e){ if(e.message!=='403') throw e; }
+
       try{
-        const tt=await safeFetch('https://api.spotify.com/v1/me/top/tracks?limit=5&time_range=medium_term',token);
-        const ids=tt.items.map(t=>t.id).filter(Boolean);
+        const topT = await safeFetch('https://api.spotify.com/v1/me/top/tracks?limit=5&time_range=medium_term',token);
+        const ids  = topT.items.map(t=>t.id).filter(Boolean);
         if(ids.length) return `seed_tracks=${ids.join(',')}`;
-      }catch(_){}
-      return 'seed_genres=pop';                                // 履歴ゼロのフォールバック
+      }catch(e){ if(e.message!=='403') throw e; }
+
+      return 'seed_genres=pop';                // 403 の時もここに来る
     }
 
     /* ---------- 楽曲取得 & 表示 ---------- */
     async function fetchRecommendations(token){
       tracksElm.textContent='Loading…';
       try{
-        const seed  = await createSeedParams(token);
-        const url   = `https://api.spotify.com/v1/recommendations?${seed}&limit=10&market=from_token`;
-        const data  = await safeFetch(url,token);
+        const seed = await createSeedParams(token);
+        const url  = `https://api.spotify.com/v1/recommendations?${seed}&limit=10&market=JP`;
+                                                   /* ↑ seed が空文字にならないよう保証 */
+        const data = await safeFetch(url,token);
 
         tracksElm.innerHTML='';
         data.tracks.forEach(t=>{
@@ -99,7 +100,7 @@
           tracksElm.appendChild(card);
         });
       }catch(e){
-        tracksElm.textContent=e.message;
+        tracksElm.textContent = 'エラー: '+e.message;
         console.error(e);
       }
     }
