@@ -5,10 +5,10 @@
   <title>Spotify おすすめ楽曲</title>
   <style>
     body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;margin:0;padding:2rem 1rem;}
-    h1{margin-top:0;text-align:center;}
-    #loginBtn{display:inline-block;margin:1rem auto;padding:0.8rem 1.6rem;font-size:1.1rem;border:none;border-radius:6px;background:#1db954;color:#fff;cursor:pointer;}
+    h1{text-align:center;margin-top:0;}
+    #loginBtn{display:block;margin:1rem auto;padding:.8rem 1.6rem;font-size:1rem;border:none;border-radius:6px;background:#1db954;color:#fff;cursor:pointer;}
     #tracks{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;margin-top:2rem;}
-    .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.1);padding:0.8rem;text-align:center;}
+    .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.1);padding:.8rem;text-align:center;}
     .card img{width:100%;border-radius:6px;}
     .title{font-size:.9rem;font-weight:700;margin:.4rem 0;}
     .artist{font-size:.8rem;color:#555;}
@@ -23,7 +23,7 @@
     import { createPKCE } from './pkce.js';
 
     /* ===== アプリ設定 ===== */
-    const clientId    = '89175f465b5d42c9aac789c37cf8d730';    // ←ご自身の Client ID
+    const clientId    = '89175f465b5d42c9aac789c37cf8d730';   // ←自分の Client ID
     const redirectUri = 'https://yamasan61.github.io/spotify-token-test/playlist_recommender/callback.html';
     const scope       = 'user-read-private user-top-read';
 
@@ -32,75 +32,82 @@
 
     /* ---------- 汎用 fetch ---------- */
     async function safeFetch(url, token){
-      const res = await fetch(url,{ headers:{ Authorization:'Bearer '+token }});
+      const res = await fetch(url,{ headers:{Authorization:'Bearer '+token}});
       if(!res.ok) throw new Error(String(res.status));
       return res.json();
     }
 
-    /* ---------- Spotify ログイン (PKCE＋state) ---------- */
-    loginBtn.addEventListener('click', async ()=>{
-      const { verifier, challenge } = await createPKCE();
-      const state = crypto.randomUUID();
-      localStorage.setItem('pkce.'+state, verifier);
+    /* ---------- Spotify ログイン ---------- */
+    loginBtn.onclick = async ()=>{
+      const {verifier,challenge}=await createPKCE();
+      const state=crypto.randomUUID();
+      localStorage.setItem('pkce.'+state,verifier);
 
-      const p = new URLSearchParams({
-        client_id: clientId,
-        response_type: 'code',
-        redirect_uri: redirectUri,
-        scope,
-        code_challenge_method: 'S256',
-        code_challenge: challenge,
-        state,
-        show_dialog: 'true'
+      const p=new URLSearchParams({
+        client_id:clientId,response_type:'code',redirect_uri:redirectUri,scope,
+        code_challenge_method:'S256',code_challenge:challenge,state,show_dialog:'true'
       });
-      location.href = 'https://accounts.spotify.com/authorize?'+p;
-    });
+      location.href='https://accounts.spotify.com/authorize?'+p;
+    };
 
-    /* ---------- ページロード時 ---------- */
-    const token = sessionStorage.getItem('access_token');
+    /* ---------- ページロード ---------- */
+    const token=sessionStorage.getItem('access_token');
     if(token){
-      safeFetch('https://api.spotify.com/v1/me', token)
-        .then(()=>{ loginBtn.style.display='none'; fetchRecs(token); })
-        .catch(()=> sessionStorage.removeItem('access_token'));
+      safeFetch('https://api.spotify.com/v1/me',token)
+        .then(()=>{loginBtn.style.display='none';fetchRecs(token);})
+        .catch(()=>sessionStorage.removeItem('access_token'));
     }
 
-    /* ---------- seed を必ず返す ---------- */
-    async function getSeed(token){
-      const endpoints=[
-        'https://api.spotify.com/v1/me/top/artists?limit=5',
-        'https://api.spotify.com/v1/me/top/tracks?limit=5'
-      ];
-      for(const url of endpoints){
-        try{
-          const j=await safeFetch(url,token);
-          const ids=j.items.map(i=>i.id).filter(Boolean).slice(0,5);
-          if(ids.length) return url.includes('artists')
-            ? `seed_artists=${ids.join(',')}`
-            : `seed_tracks=${ids.join(',')}`;
-        }catch(e){ if(e.message!=='403') throw e; } // 403 は無視して次へ
-      }
-      return 'seed_genres=pop';        // 最後の砦
+    /* ---------- seed 生成 ---------- */
+    async function buildSeed(token){
+      // 1. top-artists → ID 正常性チェック
+      try{
+        const a=await safeFetch('https://api.spotify.com/v1/me/top/artists?limit=10',token);
+        const alive=[];
+        for(const it of a.items.slice(0,10)){
+          try{
+            await safeFetch('https://api.spotify.com/v1/artists/'+it.id,token);
+            alive.push(it.id);
+            if(alive.length===5) break;
+          }catch(_){/* dead id → skip */}
+        }
+        if(alive.length) return `seed_artists=${alive.join(',')}`;
+      }catch(e){ if(e.message!=='403') throw e; }
+
+      // 2. top-tracks
+      try{
+        const t=await safeFetch('https://api.spotify.com/v1/me/top/tracks?limit=5',token);
+        const ids=t.items.map(i=>i.id).filter(Boolean);
+        if(ids.length) return `seed_tracks=${ids.slice(0,5).join(',')}`;
+      }catch(e){ if(e.message!=='403') throw e; }
+
+      // 3. Fallback
+      return 'seed_genres=pop';
     }
 
-    /* ---------- 推薦取得（404 フォールバック付き） ---------- */
+    /* ---------- 推薦取得 ---------- */
     async function fetchRecs(token){
       tracksElm.textContent='Loading…';
       try{
-        const seed   = await getSeed(token);
-        const markets=['from_token','JP','US','']; // 順に試す
-        let  data,lastErr;
+        let seed = await buildSeed(token);
+        let data;
 
-        for(const m of markets){
-          const url=`https://api.spotify.com/v1/recommendations?${seed}&limit=10${m?`&market=${m}`:''}`;
+        for(const market of ['JP','US','']){
+          const url=`https://api.spotify.com/v1/recommendations?${seed}&limit=10${market?`&market=${market}`:''}`;
           try{
             data=await safeFetch(url,token);
-            if(data.tracks?.length) break;  // 成功
+            if(data.tracks?.length) break;          // 成功
           }catch(e){
-            if(e.message!=='404') throw e;  // 404 以外 → 直ちにエラー
-            lastErr=e;                      // 404 → 次の market へ
+            if(e.message==='404') continue;         // 404 → 次の market
+            throw e;                                // 他エラー → 即終了
           }
         }
-        if(!data?.tracks?.length) throw lastErr||new Error('no tracks');
+
+        // まだ取れなければ seed_genres に強制変更
+        if(!data?.tracks?.length){
+          seed='seed_genres=pop';
+          data=await safeFetch(`https://api.spotify.com/v1/recommendations?${seed}&limit=10&market=JP`,token);
+        }
 
         tracksElm.innerHTML='';
         data.tracks.forEach(t=>{
