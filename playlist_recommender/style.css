@@ -1,11 +1,12 @@
 body {
-  font-family: 'Helvetica Neue', Arial, sans-serif;
-  background: #fafafa;
-  margin: 0;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding-top: 40px;
+  font-family: Arial,Helvetica,sans-serif;
+  background:#f5f7fa;
+  margin:0;
+  display:flex;                 /* ← 追加 */
+  flex-direction:column;        /* ← 追加（見出しとボタンを縦に並べる） */
+  justify-content:center;       /* ← 縦方向中央 */
+  align-items:center;           /* ← 横方向中央 */
+  height:100vh;                 /* ← 画面高さぶん中央寄せが効く */
 }
 
 .container {
