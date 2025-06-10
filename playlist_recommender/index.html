@@ -58,49 +58,56 @@
 
     /* ---------- ページロード時 ---------- */
     const accessToken = sessionStorage.getItem('access_token');
-    if(accessToken){
-      loginBtn.style.display='none';
-      fetchRecommendations(accessToken);
+
+    if (accessToken) {
+      // トークンが有効かテストする
+      safeFetch('https://api.spotify.com/v1/me', accessToken)
+        .then(() => {                  // OK → そのままおすすめ取得
+          loginBtn.style.display = 'none';
+          fetchRecommendations(accessToken);
+        })
+        .catch(() => {                 // 401 / 403 → トークン破棄して再ログイン要求
+          sessionStorage.removeItem('access_token');
+        });
     }
 
     /* ---------- 推薦シードを作成 ---------- */
     async function createSeedParams(token){
       try{
-        const topA = await safeFetch('https://api.spotify.com/v1/me/top/artists?limit=5&time_range=medium_term',token);
+        const topA = await safeFetch('https://api.spotify.com/v1/me/top/artists?limit=5&time_range=medium_term', token);
         const ids  = topA.items.map(a=>a.id).filter(Boolean);
         if(ids.length) return `seed_artists=${ids.join(',')}`;
       }catch(e){ if(e.message!=='403') throw e; }
 
       try{
-        const topT = await safeFetch('https://api.spotify.com/v1/me/top/tracks?limit=5&time_range=medium_term',token);
+        const topT = await safeFetch('https://api.spotify.com/v1/me/top/tracks?limit=5&time_range=medium_term', token);
         const ids  = topT.items.map(t=>t.id).filter(Boolean);
         if(ids.length) return `seed_tracks=${ids.join(',')}`;
       }catch(e){ if(e.message!=='403') throw e; }
 
-      return 'seed_genres=pop';                // 403 の時もここに来る
+      return 'seed_genres=pop';        // 403 の場合もここへ
     }
 
     /* ---------- 楽曲取得 & 表示 ---------- */
     async function fetchRecommendations(token){
-      tracksElm.textContent='Loading…';
+      tracksElm.textContent = 'Loading…';
       try{
         const seed = await createSeedParams(token);
         const url  = `https://api.spotify.com/v1/recommendations?${seed}&limit=10&market=JP`;
-                                                   /* ↑ seed が空文字にならないよう保証 */
-        const data = await safeFetch(url,token);
+        const data = await safeFetch(url, token);
 
-        tracksElm.innerHTML='';
+        tracksElm.innerHTML = '';
         data.tracks.forEach(t=>{
-          const card=document.createElement('div');
-          card.className='card';
-          card.innerHTML=`
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.innerHTML = `
             <img src="${t.album.images[0]?.url||''}" alt="${t.name}">
             <p class="title">${t.name}</p>
             <p class="artist">${t.artists.map(a=>a.name).join(', ')}</p>`;
           tracksElm.appendChild(card);
         });
       }catch(e){
-        tracksElm.textContent = 'エラー: '+e.message;
+        tracksElm.textContent = 'エラー: ' + e.message;
         console.error(e);
       }
     }
