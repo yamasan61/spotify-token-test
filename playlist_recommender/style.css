@@ -9,6 +9,22 @@ body {
   height:100vh;                 /* ← 画面高さぶん中央寄せが効く */
 }
 
+.wrapper {
+  display:flex;
+  justify-content:center;        /* 横中央 */
+  align-items:center;            /* 縦中央 */
+  position:fixed;                /* 画面に貼り付け */
+  top:50%;
+  left:50%;
+  transform:translate(-50%, -50%);
+  width:100%;                    /* 横いっぱい（カードが後で下に流れてもOK） */
+  pointer-events:none;           /* ボタン以外のクリック透過 */
+}
+.wrapper button{
+  pointer-events:auto;           /* ボタンはクリック可 */
+}
+
+
 .container {
   background: #fff;
   padding: 2rem 2.5rem;
