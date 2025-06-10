@@ -19,98 +19,88 @@
   <button id="loginBtn">Spotify でログイン</button>
   <div id="tracks"></div>
 
-  <script type="module">
-    import { createPKCE } from './pkce.js';
+<script type="module">
+import { createPKCE } from './pkce.js';
+const clientId    = '89175f465b5d42c9aac789c37cf8d730';
+const redirectUri = 'https://yamasan61.github.io/spotify-token-test/playlist_recommender/callback.html';
+const scope       = 'user-read-private user-top-read';
 
-    /* ===== アプリ設定 ===== */
-    const clientId    = '89175f465b5d42c9aac789c37cf8d730';           // ←ご自分の Client ID
-    const redirectUri = 'https://yamasan61.github.io/spotify-token-test/playlist_recommender/callback.html';
-    const scope       = 'user-read-private user-top-read';
+const loginBtn  = document.getElementById('loginBtn');
+const tracksElm = document.getElementById('tracks');
 
-    const loginBtn  = document.getElementById('loginBtn');
-    const tracksElm = document.getElementById('tracks');
+async function safeFetch(url, token){
+  const res = await fetch(url,{ headers:{ Authorization:'Bearer '+token }});
+  if(!res.ok) throw new Error(res.status);
+  return res.json();
+}
 
-    /* ---------- 汎用 fetch ---------- */
-    async function safeFetch(url, token){
-      const res = await fetch(url,{ headers:{ Authorization:'Bearer '+token }});
-      if(!res.ok) throw new Error(res.status);
-      return res.json();
+/* ---------- Spotify ログイン ---------- */
+loginBtn.onclick = async ()=>{
+  const { verifier, challenge } = await createPKCE();
+  const state = crypto.randomUUID();
+  localStorage.setItem('pkce.'+state, verifier);
+
+  const p = new URLSearchParams({
+    client_id:clientId,response_type:'code',redirect_uri:redirectUri,
+    scope,code_challenge_method:'S256',code_challenge:challenge,state
+  });
+  location.href='https://accounts.spotify.com/authorize?'+p;
+};
+
+/* ---------- ページロード時 ---------- */
+const token = sessionStorage.getItem('access_token');
+if(token){
+  try{
+    await safeFetch('https://api.spotify.com/v1/me',token);     // トークン健全確認
+    loginBtn.style.display='none';
+    fetchRecs(token);
+  }catch{
+    sessionStorage.removeItem('access_token');
+  }
+}
+
+/* ---------- seed を必ず返す ---------- */
+async function getSeed(token){
+  const endpoints = [
+    'https://api.spotify.com/v1/me/top/artists?limit=5',
+    'https://api.spotify.com/v1/me/top/tracks?limit=5'
+  ];
+  for(const url of endpoints){
+    try{
+      const j = await safeFetch(url,token);
+      const ids=j.items.map(i=>i.id).filter(Boolean);
+      if(ids.length) return url.includes('artists')
+        ? `seed_artists=${ids.slice(0,5).join(',')}`
+        : `seed_tracks=${ids.slice(0,5).join(',')}`;
+    }catch(e){
+      if(e.message!=='403') throw e;       // 403 は無視して次へ
     }
+  }
+  return 'seed_genres=pop';               // 最後の砦
+}
 
-    /* ---------- Spotify ログイン (PKCE＋state) ---------- */
-    loginBtn.addEventListener('click', async ()=>{
-      const { verifier, challenge } = await createPKCE();
-      const state = crypto.randomUUID();
-      localStorage.setItem('pkce.'+state, verifier);
+/* ---------- 推薦取得 ---------- */
+async function fetchRecs(token){
+  tracksElm.textContent='Loading…';
+  try{
+    const seed = await getSeed(token);
+    console.log('[DEBUG] seed =>', seed); // ここで必ず何か表示されるはず
+    const url  = `https://api.spotify.com/v1/recommendations?${seed}&limit=10&market=from_token`;
+    const j    = await safeFetch(url,token);
 
-      const p = new URLSearchParams({
-        client_id: clientId,
-        response_type: 'code',
-        redirect_uri: redirectUri,
-        scope,
-        code_challenge_method: 'S256',
-        code_challenge: challenge,
-        state,
-        show_dialog: 'true'
-      });
-      location.href = 'https://accounts.spotify.com/authorize?'+p;
+    tracksElm.innerHTML='';
+    j.tracks.forEach(t=>{
+      tracksElm.insertAdjacentHTML('beforeend',`
+        <div class="card">
+          <img src="${t.album.images[0]?.url||''}"><p class="title">${t.name}</p>
+          <p class="artist">${t.artists.map(a=>a.name).join(', ')}</p>
+        </div>`);
     });
-
-    /* ---------- ページロード時 ---------- */
-    const accessToken = sessionStorage.getItem('access_token');
-
-    if (accessToken) {
-      // トークンが有効かテストする
-      safeFetch('https://api.spotify.com/v1/me', accessToken)
-        .then(() => {                  // OK → そのままおすすめ取得
-          loginBtn.style.display = 'none';
-          fetchRecommendations(accessToken);
-        })
-        .catch(() => {                 // 401 / 403 → トークン破棄して再ログイン要求
-          sessionStorage.removeItem('access_token');
-        });
-    }
-
-    /* ---------- 推薦シードを作成 ---------- */
-    async function createSeedParams(token){
-      try{
-        const topA = await safeFetch('https://api.spotify.com/v1/me/top/artists?limit=5&time_range=medium_term', token);
-        const ids  = topA.items.map(a=>a.id).filter(Boolean);
-        if(ids.length) return `seed_artists=${ids.join(',')}`;
-      }catch(e){ if(e.message!=='403') throw e; }
-
-      try{
-        const topT = await safeFetch('https://api.spotify.com/v1/me/top/tracks?limit=5&time_range=medium_term', token);
-        const ids  = topT.items.map(t=>t.id).filter(Boolean);
-        if(ids.length) return `seed_tracks=${ids.join(',')}`;
-      }catch(e){ if(e.message!=='403') throw e; }
-
-      return 'seed_genres=pop';        // 403 の場合もここへ
-    }
-
-    /* ---------- 楽曲取得 & 表示 ---------- */
-    async function fetchRecommendations(token){
-      tracksElm.textContent = 'Loading…';
-      try{
-        const seed = await createSeedParams(token);
-        const url  = `https://api.spotify.com/v1/recommendations?${seed}&limit=10&market=JP`;
-        const data = await safeFetch(url, token);
-
-        tracksElm.innerHTML = '';
-        data.tracks.forEach(t=>{
-          const card = document.createElement('div');
-          card.className = 'card';
-          card.innerHTML = `
-            <img src="${t.album.images[0]?.url||''}" alt="${t.name}">
-            <p class="title">${t.name}</p>
-            <p class="artist">${t.artists.map(a=>a.name).join(', ')}</p>`;
-          tracksElm.appendChild(card);
-        });
-      }catch(e){
-        tracksElm.textContent = 'エラー: ' + e.message;
-        console.error(e);
-      }
-    }
-  </script>
+  }catch(e){
+    tracksElm.textContent='エラー: '+e.message;
+    console.error(e);
+  }
+}
+</script>
 </body>
 </html>
