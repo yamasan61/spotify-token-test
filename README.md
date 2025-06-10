@@ -8,7 +8,7 @@
 ## 使い方
 1. `index.html` を GitHub Pages など HTTPS で公開。
 2. Spotify Developer Dashboard で下記の Redirect URI を登録してください  
-   `https://yamasan61.github.io/spotify-token-test/playlist_recommender/callback.html`
+   `https://yamasan61.github.io/spotify-token-test/playlist_recommender/index.html`
 3. ブラウザで `index.html` を開き、「Spotify でログイン」をクリック。
 4. Spotify 認可画面 → 同意すると `callback.html` に戻り、トークンが表示されます。
 
