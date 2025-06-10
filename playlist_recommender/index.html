@@ -22,93 +22,95 @@
   <script type="module">
     import { createPKCE } from './pkce.js';
 
-    /* ===== アプリ設定 ===== */
-    const clientId    = '89175f465b5d42c9aac789c37cf8d730';   // ←自分の Client ID
+    const clientId    = '89175f465b5d42c9aac789c37cf8d730';
     const redirectUri = 'https://yamasan61.github.io/spotify-token-test/playlist_recommender/callback.html';
     const scope       = 'user-read-private user-top-read';
 
     const loginBtn  = document.getElementById('loginBtn');
     const tracksElm = document.getElementById('tracks');
 
-    /* ---------- 汎用 fetch ---------- */
+    /* -------------- 共通 fetch --------------- */
     async function safeFetch(url, token){
       const res = await fetch(url,{ headers:{Authorization:'Bearer '+token}});
-      if(!res.ok) throw new Error(String(res.status));
+      if(!res.ok) throw new Error(String(res.status));   // 200 以外は status をそのまま投げる
       return res.json();
     }
 
-    /* ---------- Spotify ログイン ---------- */
+    /* -------- Spotify ログイン (PKCE) -------- */
     loginBtn.onclick = async ()=>{
       const {verifier,challenge}=await createPKCE();
-      const state=crypto.randomUUID();
-      localStorage.setItem('pkce.'+state,verifier);
+      const state = crypto.randomUUID();
+      localStorage.setItem('pkce.'+state, verifier);
 
-      const p=new URLSearchParams({
-        client_id:clientId,response_type:'code',redirect_uri:redirectUri,scope,
-        code_challenge_method:'S256',code_challenge:challenge,state,show_dialog:'true'
+      const q = new URLSearchParams({
+        client_id:clientId,response_type:'code',redirect_uri:redirectUri,
+        scope,code_challenge_method:'S256',code_challenge:challenge,state
       });
-      location.href='https://accounts.spotify.com/authorize?'+p;
+      location.href = 'https://accounts.spotify.com/authorize?'+q;
     };
 
-    /* ---------- ページロード ---------- */
-    const token=sessionStorage.getItem('access_token');
+    /* -------------- ロード時 --------------- */
+    const token = sessionStorage.getItem('access_token');
     if(token){
       safeFetch('https://api.spotify.com/v1/me',token)
-        .then(()=>{loginBtn.style.display='none';fetchRecs(token);})
+        .then(()=>{loginBtn.style.display='none'; fetchRecs(token);})
         .catch(()=>sessionStorage.removeItem('access_token'));
     }
 
-    /* ---------- seed 生成 ---------- */
+    /* ----------- seed を作る ------------- */
     async function buildSeed(token){
-      // 1. top-artists → ID 正常性チェック
+      /* 1) ユーザーの top-artists */
       try{
-        const a=await safeFetch('https://api.spotify.com/v1/me/top/artists?limit=10',token);
-        const alive=[];
-        for(const it of a.items.slice(0,10)){
-          try{
-            await safeFetch('https://api.spotify.com/v1/artists/'+it.id,token);
-            alive.push(it.id);
-            if(alive.length===5) break;
-          }catch(_){/* dead id → skip */}
-        }
-        if(alive.length) return `seed_artists=${alive.join(',')}`;
+        const a=await safeFetch('https://api.spotify.com/v1/me/top/artists?limit=5',token);
+        const ids=a.items.map(i=>i.id).filter(Boolean);
+        if(ids.length) return {seed:`seed_artists=${ids.join(',')}`, note:'personal-artists'};
       }catch(e){ if(e.message!=='403') throw e; }
 
-      // 2. top-tracks
+      /* 2) ユーザーの top-tracks */
       try{
         const t=await safeFetch('https://api.spotify.com/v1/me/top/tracks?limit=5',token);
         const ids=t.items.map(i=>i.id).filter(Boolean);
-        if(ids.length) return `seed_tracks=${ids.slice(0,5).join(',')}`;
+        if(ids.length) return {seed:`seed_tracks=${ids.join(',')}`, note:'personal-tracks'};
       }catch(e){ if(e.message!=='403') throw e; }
 
-      // 3. Fallback
-      return 'seed_genres=pop';
+      /* 3) ポップジャンル + 人気度フィルタ */
+      return {seed:'seed_genres=pop&min_popularity=50', note:'fallback-genre'};
     }
 
-    /* ---------- 推薦取得 ---------- */
+    /* ------------ 推薦取得 --------------- */
     async function fetchRecs(token){
       tracksElm.textContent='Loading…';
       try{
-        let seed = await buildSeed(token);
-        let data;
+        let {seed,note}=await buildSeed(token);
+        const fixedSeed='seed_artists=4NHQUGzhtTLFvgF5SZesLK'; // Avicii = Spotify docs sample
+        const markets  = ['from_token','JP','US',''];
 
-        for(const market of ['JP','US','']){
-          const url=`https://api.spotify.com/v1/recommendations?${seed}&limit=10${market?`&market=${market}`:''}`;
+        let data, success=false;
+
+        /* A) 個人 or pop シードで最大 4*markets 回試す */
+        for(const m of markets){
+          const url=`https://api.spotify.com/v1/recommendations?${seed}&limit=10${m?`&market=${m}`:''}`;
           try{
             data=await safeFetch(url,token);
-            if(data.tracks?.length) break;          // 成功
-          }catch(e){
-            if(e.message==='404') continue;         // 404 → 次の market
-            throw e;                                // 他エラー → 即終了
+            if(data.tracks?.length){ success=true; break; }
+          }catch(e){ if(e.message!=='404') throw e; }
+        }
+
+        /* B) まだ取れなければ “鉄板アーティスト ID” で再試行 */
+        if(!success){
+          for(const m of markets){
+            const url=`https://api.spotify.com/v1/recommendations?${fixedSeed}&limit=10${m?`&market=${m}`:''}`;
+            try{
+              data=await safeFetch(url,token);
+              if(data.tracks?.length){ success=true; note='fixed-artist'; break; }
+            }catch(e){ if(e.message!=='404') throw e; }
           }
         }
 
-        // まだ取れなければ seed_genres に強制変更
-        if(!data?.tracks?.length){
-          seed='seed_genres=pop';
-          data=await safeFetch(`https://api.spotify.com/v1/recommendations?${seed}&limit=10&market=JP`,token);
-        }
+        if(!success) throw new Error('Spotify が曲を返しませんでした');
 
+        /* ---------- 表示 ---------- */
+        console.log('[INFO] seed type =', note);
         tracksElm.innerHTML='';
         data.tracks.forEach(t=>{
           tracksElm.insertAdjacentHTML('beforeend',`
