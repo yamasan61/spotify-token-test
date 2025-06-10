@@ -29,18 +29,19 @@
     const loginBtn  = document.getElementById('loginBtn');
     const tracksElm = document.getElementById('tracks');
 
-    /* ---------- 共通フェッチ ---------- */
+    /* ------ 共通フェッチ ------ */
     async function safeFetch(url, token){
-      const res = await fetch(url,{headers:{Authorization:'Bearer '+token}});
-      let detail='';try{detail=await res.clone().text();}catch(_){}
+      const res = await fetch(url,{ headers:{ Authorization:'Bearer '+token }});
+      let detail='';
+      try{ detail = await res.clone().text(); }catch(_){}
       if(res.status===401) throw new Error('401: トークン期限切れ\\n'+detail);
       if(res.status===403) throw new Error('403: 認可エラー\\n'+detail);
-      if(!res.ok)          throw new Error(res.status+' : '+detail);
+      if(!res.ok)         throw new Error(res.status+' : '+detail);
       return res.json();
     }
 
-    /* ---------- Spotify ログイン ---------- */
-    loginBtn.addEventListener('click', async () => {
+    /* ------ Spotify ログイン ------ */
+    loginBtn.addEventListener('click', async ()=>{
       const { verifier, challenge } = await createPKCE();
       sessionStorage.setItem('code_verifier', verifier);
 
@@ -56,47 +57,47 @@
       location.href = 'https://accounts.spotify.com/authorize?' + p.toString();
     });
 
-    /* ---------- ページロード時に曲取得 ---------- */
+    /* ------ ページロード時に曲取得 ------ */
     const accessToken = sessionStorage.getItem('access_token');
-    if (accessToken) {
+    if(accessToken){
       loginBtn.style.display = 'none';
       fetchRecommendations(accessToken);
     }
 
-    /* ---------- 曲取得関数 ---------- */
-    async function fetchRecommendations(token) {
+    /* ------ 曲取得 ------ */
+    async function fetchRecommendations(token){
       tracksElm.textContent = 'Loading…';
 
-      /* まず recommendations を試す */
-      const recURL = 'https://api.spotify.com/v1/recommendations?seed_genres=pop&limit=10&market=JP';
+      /* まず recommendations (market なし) */
+      const recURL = 'https://api.spotify.com/v1/recommendations?seed_genres=pop&limit=10';
       let data;
-      try {
+      try{
         data = await safeFetch(recURL, token);
-      } catch(e) {
-        if (e.message.startsWith('404')) {
-          /* 404 → search にフォールバック（ランダム offset で毎回変える） */
+      }catch(e){
+        if(e.message.startsWith('404')){
+          /* 404 → search にフォールバック (market なし & random offset) */
           const offset = Math.floor(Math.random()*1000);
-          const searchURL = `https://api.spotify.com/v1/search?q=genre%3Apop&type=track&limit=10&offset=${offset}&market=JP`;
+          const searchURL = `https://api.spotify.com/v1/search?q=genre%3Apop&type=track&limit=10&offset=${offset}`;
           data = await safeFetch(searchURL, token);
           data = { tracks: data.tracks.items };
-        } else {
+        }else{
           tracksElm.textContent = e.message;
           return;
         }
       }
 
       const list = data.tracks?.items ?? data.tracks ?? [];
-      if (!list.length) {
+      if(!list.length){
         tracksElm.textContent = '曲が取得できませんでした';
         return;
       }
 
       tracksElm.innerHTML = '';
-      list.forEach(t => {
+      list.forEach(t=>{
         const card = document.createElement('div');
-        card.className = 'card';
+        card.className='card';
         card.innerHTML = `
-          <img src="${t.album.images[0]?.url || ''}" alt="${t.name}">
+          <img src="${t.album.images[0]?.url||''}" alt="${t.name}">
           <p class="title">${t.name}</p>
           <p class="artist">${t.artists.map(a=>a.name).join(', ')}</p>`;
         tracksElm.appendChild(card);
