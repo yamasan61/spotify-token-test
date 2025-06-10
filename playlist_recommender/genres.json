@@ -17,16 +17,8 @@
       "value": "hip-hop"
     },
     {
-      "label": "クラシック",
-      "value": "classical"
-    },
-    {
-      "label": "エレクトロニック",
+      "label": "エレクトロ",
       "value": "electronic"
-    },
-    {
-      "label": "R&B",
-      "value": "r-n-b"
     }
   ]
 }
